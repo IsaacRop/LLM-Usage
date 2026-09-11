@@ -1,0 +1,83 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">AI Limits</title>
+  <desc id="desc">Local usage monitor for Codex and Claude Code on Windows</desc>
+  <defs>
+    <linearGradient id="bg" x1="50" y1="15" x2="1150" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0D1C1B"/><stop offset=".5" stop-color="#091112"/><stop offset="1" stop-color="#151512"/>
+    </linearGradient>
+    <radialGradient id="mint" cx="0" cy="0" r="1" gradientTransform="translate(250 60) rotate(35) scale(470 340)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5AF2C5" stop-opacity=".17"/><stop offset="1" stop-color="#5AF2C5" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orange" cx="0" cy="0" r="1" gradientTransform="translate(1060 440) rotate(-150) scale(400 270)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFAE5D" stop-opacity=".14"/><stop offset="1" stop-color="#FFAE5D" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" stroke="#A9D9CC" stroke-opacity=".055"/></pattern>
+    <linearGradient id="edge" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5AF2C5" stop-opacity=".5"/><stop offset=".48" stop-color="#5AF2C5" stop-opacity=".05"/><stop offset="1" stop-color="#FFAE5D" stop-opacity=".42"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dy="18" stdDeviation="20" flood-opacity=".55"/></filter>
+    <filter id="glow" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <rect x="1" y="1" width="1198" height="518" rx="24" fill="url(#bg)" stroke="url(#edge)" stroke-width="2"/>
+  <rect x="1" y="1" width="1198" height="518" rx="24" fill="url(#mint)"/>
+  <rect x="1" y="1" width="1198" height="518" rx="24" fill="url(#orange)"/>
+  <rect x="1" y="1" width="1198" height="518" rx="24" fill="url(#grid)"/>
+
+  <path d="M38 94V42H148M1052 478H1162V426" stroke="#5AF2C5" stroke-opacity=".28" stroke-width="2"/>
+  <rect x="34" y="38" width="8" height="8" fill="#5AF2C5" fill-opacity=".55"/>
+  <rect x="1158" y="474" width="8" height="8" fill="#FFAE5D" fill-opacity=".65"/>
+
+  <g transform="translate(72 89)" font-family="Consolas, monospace">
+    <rect width="195" height="29" rx="3" fill="#142625" stroke="#315049"/>
+    <circle cx="16" cy="14.5" r="4" fill="#5AF2C5" filter="url(#glow)"/>
+    <text x="29" y="19" fill="#91BDB1" font-size="11" letter-spacing="1.4">LOCAL-FIRST / WINDOWS</text>
+    <text x="0" y="106" fill="#F0FBF7" font-size="64" font-weight="700" letter-spacing="-3">AI LIMITS</text>
+    <text x="2" y="149" fill="#8CA59F" font-size="18" letter-spacing=".4">YOUR AI USAGE. ALWAYS IN SIGHT.</text>
+
+    <g transform="translate(2 191)" font-size="13">
+      <rect width="9" height="9" fill="#5AF2C5"/><text x="23" y="10" fill="#B9CDC8">CODEX + CLAUDE CODE</text>
+      <rect y="34" width="9" height="9" fill="#FFAE5D"/><text x="23" y="44" fill="#B9CDC8">NO BACKEND. NO TELEMETRY.</text>
+      <rect y="68" width="9" height="9" fill="#769D93"/><text x="23" y="78" fill="#B9CDC8">NATIVE, COMPACT, RESILIENT.</text>
+    </g>
+    <g transform="translate(0 318)" fill="#56726B" font-size="10" letter-spacing="1.6">
+      <text y="12">TAURI 2</text><path d="M71 8H92" stroke="#315049"/><text x="106" y="12">RUST</text><path d="M149 8H170" stroke="#315049"/><text x="184" y="12">REACT 19</text>
+    </g>
+  </g>
+
+  <g transform="translate(759 45)" filter="url(#shadow)" font-family="Consolas, monospace">
+    <rect width="330" height="430" rx="3" fill="#091112" stroke="#38504E" stroke-width="2"/>
+    <rect x="7" y="7" width="316" height="416" fill="none" stroke="#80DDC8" stroke-opacity=".07"/>
+    <rect x="1" y="1" width="328" height="50" fill="#0D1718"/><path d="M1 51H329" stroke="#263637"/>
+    <text x="18" y="32" fill="#5AF2C5" font-size="21">+</text><text x="41" y="30" fill="#E4F6EF" font-size="13" font-weight="700" letter-spacing="1.7">AI LIMITS</text>
+    <text x="130" y="30" fill="#63817A" font-size="8" letter-spacing="1">LOCAL MONITOR</text><text x="278" y="32" fill="#8DA9A2" font-size="19">↻</text><text x="305" y="31" fill="#8DA9A2" font-size="15">⚙</text>
+
+    <g transform="translate(16 67)">
+      <rect width="298" height="151" fill="#0E1819" stroke="#273B3A"/>
+      <rect x="16" y="18" width="9" height="9" fill="#236C5E"/><rect x="13" y="15" width="9" height="9" fill="#5AF2C5"/>
+      <text x="32" y="25" fill="#E4F6EF" font-size="13" font-weight="700" letter-spacing="1.8">CODEX</text><circle cx="236" cy="20" r="3" fill="#5AF2C5"/><text x="245" y="23" fill="#718A84" font-size="8">AVAILABLE</text>
+      <text x="13" y="58" fill="#8BA29D" font-size="9" letter-spacing="1">5H WINDOW</text><text x="251" y="59" fill="#5AF2C5" font-size="15" font-weight="700">42%</text>
+      <g transform="translate(13 70)"><path d="M0 0H116" stroke="#5AF2C5" stroke-width="10" stroke-dasharray="25 4"/><path d="M116 0H261" stroke="#1B2929" stroke-width="10" stroke-dasharray="25 4"/></g>
+      <text x="13" y="102" fill="#6E8580" font-size="8">58% REMAINING</text><text x="210" y="102" fill="#5AF2C5" font-size="8">RESET 03:17:42</text>
+      <text x="13" y="129" fill="#8BA29D" font-size="9" letter-spacing="1">WEEK</text><text x="251" y="130" fill="#5AF2C5" font-size="15" font-weight="700">18%</text>
+      <path d="M13 141H65" stroke="#5AF2C5" stroke-width="8" stroke-dasharray="25 4"/><path d="M71 141H274" stroke="#1B2929" stroke-width="8" stroke-dasharray="25 4"/>
+    </g>
+
+    <path d="M16 233H314" stroke="#293A39" stroke-dasharray="4 4"/>
+    <g transform="translate(16 249)">
+      <rect width="298" height="126" fill="#0E1819" stroke="#273B3A"/>
+      <rect x="16" y="18" width="9" height="9" fill="#754B28"/><rect x="13" y="15" width="9" height="9" fill="#FFAE5D"/>
+      <text x="32" y="25" fill="#E4F6EF" font-size="13" font-weight="700" letter-spacing="1.8">CLAUDE</text><circle cx="236" cy="20" r="3" fill="#FFAE5D"/><text x="245" y="23" fill="#8B7865" font-size="8">AVAILABLE</text>
+      <text x="13" y="59" fill="#8BA29D" font-size="9" letter-spacing="1">SESSION</text><text x="251" y="60" fill="#FFAE5D" font-size="15" font-weight="700">67%</text>
+      <g transform="translate(13 72)"><path d="M0 0H174" stroke="#FFAE5D" stroke-width="10" stroke-dasharray="25 4"/><path d="M174 0H261" stroke="#1B2929" stroke-width="10" stroke-dasharray="25 4"/></g>
+      <text x="13" y="103" fill="#6E8580" font-size="8">33% REMAINING</text><text x="210" y="103" fill="#FFAE5D" font-size="8">RESET 01:42:09</text>
+    </g>
+
+    <rect x="1" y="391" width="328" height="38" fill="#0D1718"/><path d="M1 391H329" stroke="#263637"/>
+    <circle cx="19" cy="410" r="3" fill="#5AF2C5" filter="url(#glow)"/><text x="29" y="413" fill="#70B9A5" font-size="8" letter-spacing="1">LIVE</text><text x="224" y="413" fill="#6E8580" font-size="8">JUST NOW</text>
+    <rect x="278" y="400" width="37" height="20" fill="#172727"/><text x="284" y="413" fill="#89ADA4" font-size="7">MINI</text>
+  </g>
+
+  <circle cx="705" cy="99" r="3" fill="#5AF2C5"/><path d="M668 99H700" stroke="#5AF2C5" stroke-opacity=".42"/>
+  <circle cx="1117" cy="376" r="3" fill="#FFAE5D"/><path d="M1122 376H1150" stroke="#FFAE5D" stroke-opacity=".42"/>
+</svg>
