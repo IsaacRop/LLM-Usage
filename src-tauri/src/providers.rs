@@ -132,7 +132,7 @@ fn claude_command() -> (Command, bool) {
     }
     #[cfg(windows)]
     {
-        return (hidden_command("cmd"), false);
+        (hidden_command("cmd"), false)
     }
     #[cfg(not(windows))]
     {
@@ -140,7 +140,7 @@ fn claude_command() -> (Command, bool) {
     }
 }
 
-fn gemini_command() -> (String, Vec<String>) {
+fn gemini_command(prompt: &str) -> (String, Vec<String>) {
     #[cfg(windows)]
     {
         let mut candidates = Vec::new();
@@ -150,15 +150,15 @@ fn gemini_command() -> (String, Vec<String>) {
         let executable = find_executable(&candidates)
             .map(|path| format!("\"{}\"", path.display()))
             .unwrap_or_else(|| "gemini".to_string());
-        return (
+        (
             "cmd.exe".to_string(),
             vec![
                 "/D".to_string(),
                 "/S".to_string(),
                 "/C".to_string(),
-                format!("{executable} --prompt-interactive \"/stats\" --screen-reader"),
+                format!("{executable} --prompt-interactive \"{prompt}\" --screen-reader"),
             ],
-        );
+        )
     }
     #[cfg(not(windows))]
     {
@@ -166,7 +166,7 @@ fn gemini_command() -> (String, Vec<String>) {
             "gemini".to_string(),
             vec![
                 "--prompt-interactive".to_string(),
-                "/stats".to_string(),
+                prompt.to_string(),
                 "--screen-reader".to_string(),
             ],
         )
@@ -212,7 +212,7 @@ fn capture_pty(program: String, args: Vec<String>) -> Result<Vec<u8>, String> {
     let started = Instant::now();
     let mut last_output = Instant::now();
     let mut output = Vec::new();
-    while started.elapsed() < Duration::from_secs(20) {
+    while started.elapsed() < Duration::from_secs(15) {
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(chunk) => {
                 output.extend_from_slice(&chunk);
@@ -234,6 +234,12 @@ fn capture_pty(program: String, args: Vec<String>) -> Result<Vec<u8>, String> {
         let text = String::from_utf8_lossy(&output).to_ascii_lowercase();
         let has_usage = text.contains("model usage") && text.contains('%');
         if has_usage && last_output.elapsed() > Duration::from_millis(900) {
+            break;
+        }
+        if !output.is_empty()
+            && started.elapsed() > Duration::from_secs(5)
+            && last_output.elapsed() > Duration::from_secs(2)
+        {
             break;
         }
     }
@@ -316,7 +322,7 @@ fn spawn_json_lines(
         .ok_or_else(|| "stdout unavailable".to_string())?;
     let (sender, receiver) = mpsc::channel::<String>();
     thread::spawn(move || {
-        for line in BufReader::new(stdout).lines().flatten() {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             if sender.send(line).is_err() {
                 break;
             }
@@ -451,37 +457,46 @@ impl GeminiProvider {
             windows: vec![],
             updated_at: now_iso(),
             message: Some(message.to_string()),
-            source: Some("Gemini CLI /stats".to_string()),
+            source: Some("Gemini CLI quota screen".to_string()),
         })
     }
 }
 impl UsageProvider for GeminiProvider {
     fn get_usage(self) -> ProviderUsageResult {
-        let (program, args) = gemini_command();
-        let bytes = match capture_pty(program, args) {
-            Ok(output) => output,
-            Err(error) => return self.unavailable(&safe_status_message(&error)),
-        };
-        let text = strip_terminal_controls(&String::from_utf8_lossy(&bytes));
-        let lower = text.to_ascii_lowercase();
-        if lower.contains("sign in")
-            || lower.contains("login")
-            || lower.contains("authentication required")
-        {
-            return self.unavailable("NOT LOGGED IN");
+        let mut last_error = "DATA UNAVAILABLE".to_string();
+        for (prompt, source) in [
+            ("/model", "Gemini CLI /model quota screen"),
+            ("/stats", "Gemini CLI legacy /stats"),
+        ] {
+            let (program, args) = gemini_command(prompt);
+            let bytes = match capture_pty(program, args) {
+                Ok(output) => output,
+                Err(error) => {
+                    last_error = safe_status_message(&error);
+                    continue;
+                }
+            };
+            let text = strip_terminal_controls(&String::from_utf8_lossy(&bytes));
+            let lower = text.to_ascii_lowercase();
+            if lower.contains("sign in")
+                || lower.contains("login")
+                || lower.contains("authentication required")
+            {
+                return self.unavailable("NOT LOGGED IN");
+            }
+            let windows = parse_gemini_usage(&text);
+            if !windows.is_empty() {
+                return ProviderUsageResult(ProviderUsage {
+                    provider: "gemini".to_string(),
+                    status: ProviderStatus::Available,
+                    windows,
+                    updated_at: now_iso(),
+                    message: None,
+                    source: Some(source.to_string()),
+                });
+            }
         }
-        let windows = parse_gemini_usage(&text);
-        if windows.is_empty() {
-            return self.unavailable("DATA UNAVAILABLE");
-        }
-        ProviderUsageResult(ProviderUsage {
-            provider: "gemini".to_string(),
-            status: ProviderStatus::Available,
-            windows,
-            updated_at: now_iso(),
-            message: None,
-            source: Some("Gemini CLI /stats".to_string()),
-        })
+        self.unavailable(&last_error)
     }
 }
 
@@ -557,12 +572,11 @@ fn parse_relative_reset(line: &str) -> Option<String> {
     let lower = line.to_ascii_lowercase();
     let duration = if let Some(index) = lower.find("resets in ") {
         &lower[index + "resets in ".len()..]
-    } else if let Some(index) = lower.find("resets:") {
+    } else {
+        let index = lower.find("resets:")?;
         let reset = &lower[index + "resets:".len()..];
         let open = reset.rfind('(')?;
         reset.get(open + 1..reset.rfind(')')?)?
-    } else {
-        return None;
     };
 
     let mut minutes = 0i64;
@@ -840,9 +854,9 @@ mod tests {
     #[test]
     #[ignore = "live provider smoke test; requires the local authenticated CLIs"]
     fn live_collectors_smoke_test() {
-        let codex = CodexProvider::default().get_usage().into_usage();
-        let claude = ClaudeProvider::default().get_usage().into_usage();
-        let gemini = GeminiProvider::default().get_usage().into_usage();
+        let codex = CodexProvider.get_usage().into_usage();
+        let claude = ClaudeProvider.get_usage().into_usage();
+        let gemini = GeminiProvider.get_usage().into_usage();
         assert!(matches!(
             codex.status,
             ProviderStatus::Available | ProviderStatus::Partial

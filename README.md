@@ -44,7 +44,7 @@ AI Limits elimina a pergunta _“quanto ainda posso usar?”_ antes que ela inte
 flowchart LR
     C[Codex CLI] -->|account/rateLimits/read| R[Collectors em Rust]
     A[Claude Code CLI] -->|/usage| R
-    G[Gemini CLI] -->|/stats| R
+    G[Gemini CLI] -->|/model quotas| R
     R --> N[Modelo normalizado]
     N --> U[Widget React + Tauri]
     U --> S[(settings.json local)]
@@ -99,7 +99,7 @@ O instalador está desativado no momento para manter o build mínimo. O `.exe` r
 | :-- | :-- | :-- | :-- |
 | **Codex** | Percentual usado, duração e horário de reset das janelas primária e secundária | `codex app-server --stdio` → `account/rateLimits/read` | `Unavailable` ou último valor válido como `STALE` |
 | **Claude Code** | Sessão atual, semana atual e respectivos resets | `claude -p "/usage" --output-format json` | `Unavailable` ou último valor válido como `STALE` |
-| **Gemini CLI** | Percentual usado e reset das cotas Pro, Flash e Flash Lite | `/stats` do Gemini CLI em um pseudo-terminal oculto | `Unavailable` ou último valor válido como `STALE` |
+| **Gemini CLI** | Percentual usado e reset das cotas Pro, Flash e Flash Lite | Tela de cotas de `/model` em um pseudo-terminal oculto, com fallback para `/stats` legado | `Unavailable` ou último valor válido como `STALE` |
 
 No Codex, `remainingPercent` é somente `100 - usedPercent`. No Claude, o mesmo cálculo usa o percentual devolvido pelo próprio `/usage`. No Gemini, as cotas por modelo são agrupadas pelas famílias Pro, Flash e Flash Lite, seguindo a apresentação do CLI. Resets textuais são convertidos para timestamps locais apenas para alimentar o countdown.
 
@@ -155,7 +155,7 @@ cargo test --manifest-path src-tauri/Cargo.toml -- --ignored live_collectors_smo
 
 - `account/rateLimits/read` é uma interface experimental do app-server do Codex e pode mudar entre versões do CLI.
 - O `/usage` do Claude chega em um envelope JSON, mas seu conteúdo útil ainda é textual; mudanças nos rótulos podem exigir atualização do parser.
-- O Gemini ainda expõe as cotas por uma tela interativa; o coletor usa `/stats` em um pseudo-terminal e aceita os formatos atual e legado da tabela.
+- O Gemini ainda expõe as cotas por uma tela interativa; o coletor abre `/model` em um pseudo-terminal, usa `/stats` como fallback e aceita os formatos atual e legado da tabela.
 - A aplicação é focada em Windows e não tenta substituir os mecanismos oficiais por scraping de sites.
 
 ## Contribuindo

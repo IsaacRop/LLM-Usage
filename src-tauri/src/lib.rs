@@ -45,18 +45,15 @@ fn toggle_window(app: &AppHandle) {
 fn get_usage(store: State<'_, Store>) -> RefreshResult {
     let enabled = store.0.load().visible_providers;
     let is_enabled = |provider: &str| enabled.iter().any(|item| item == provider);
-    let codex =
-        is_enabled("codex").then(|| std::thread::spawn(|| CodexProvider::default().get_usage()));
-    let claude =
-        is_enabled("claude").then(|| std::thread::spawn(|| ClaudeProvider::default().get_usage()));
-    let gemini =
-        is_enabled("gemini").then(|| std::thread::spawn(|| GeminiProvider::default().get_usage()));
+    let codex = is_enabled("codex").then(|| std::thread::spawn(|| CodexProvider.get_usage()));
+    let claude = is_enabled("claude").then(|| std::thread::spawn(|| ClaudeProvider.get_usage()));
+    let gemini = is_enabled("gemini").then(|| std::thread::spawn(|| GeminiProvider.get_usage()));
     let mut providers = Vec::new();
     if let Some(codex) = codex {
         providers.push(
             codex
                 .join()
-                .unwrap_or_else(|_| CodexProvider::default().unavailable("collector crashed"))
+                .unwrap_or_else(|_| CodexProvider.unavailable("collector crashed"))
                 .into_usage(),
         );
     }
@@ -64,7 +61,7 @@ fn get_usage(store: State<'_, Store>) -> RefreshResult {
         providers.push(
             claude
                 .join()
-                .unwrap_or_else(|_| ClaudeProvider::default().unavailable("collector crashed"))
+                .unwrap_or_else(|_| ClaudeProvider.unavailable("collector crashed"))
                 .into_usage(),
         );
     }
@@ -72,7 +69,7 @@ fn get_usage(store: State<'_, Store>) -> RefreshResult {
         providers.push(
             gemini
                 .join()
-                .unwrap_or_else(|_| GeminiProvider::default().unavailable("collector crashed"))
+                .unwrap_or_else(|_| GeminiProvider.unavailable("collector crashed"))
                 .into_usage(),
         );
     }
@@ -189,7 +186,7 @@ fn tray_icon() -> tauri::image::Image<'static> {
     for y in 0..size {
         for x in 0..size {
             let border = x < 4 || y < 4 || x >= size - 4 || y >= size - 4;
-            let mark = (x >= 11 && x < 21) || (y >= 11 && y < 21);
+            let mark = (11..21).contains(&x) || (11..21).contains(&y);
             if border || mark {
                 let index = ((y * size + x) * 4) as usize;
                 pixels[index] = 85;
@@ -269,7 +266,7 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        show_window(&tray.app_handle());
+                        show_window(tray.app_handle());
                     }
                 })
                 .build(app)?;

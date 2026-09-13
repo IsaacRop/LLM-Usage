@@ -47,28 +47,6 @@ impl Default for AppSettings {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn old_settings_gain_all_default_providers() {
-        let settings: AppSettings = serde_json::from_str(
-            r#"{
-                "mode": "normal",
-                "opacity": 1.0,
-                "refreshIntervalSeconds": 60,
-                "alwaysOnTop": true,
-                "launchOnStartup": false,
-                "normalWidth": 280,
-                "normalHeight": 440
-            }"#,
-        )
-        .expect("legacy settings should deserialize");
-        assert_eq!(settings.visible_providers, ["codex", "claude", "gemini"]);
-    }
-}
-
 pub struct SettingsStore {
     path: PathBuf,
 }
@@ -142,4 +120,26 @@ fn set_startup(enabled: bool) -> Result<(), String> {
 #[cfg(not(windows))]
 fn set_startup(_enabled: bool) -> Result<(), String> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_settings_gain_all_default_providers() {
+        let settings: AppSettings = serde_json::from_str(
+            r#"{
+                "mode": "normal",
+                "opacity": 1.0,
+                "refreshIntervalSeconds": 60,
+                "alwaysOnTop": true,
+                "launchOnStartup": false,
+                "normalWidth": 280,
+                "normalHeight": 440
+            }"#,
+        )
+        .expect("legacy settings should deserialize");
+        assert_eq!(settings.visible_providers, ["codex", "claude", "gemini"]);
+    }
 }
