@@ -30,6 +30,7 @@ export type AppSettings = {
   refreshIntervalSeconds: number;
   alwaysOnTop: boolean;
   launchOnStartup: boolean;
+  visibleProviders: ProviderName[];
   normalWidth: number;
   normalHeight: number;
   positionX?: number;

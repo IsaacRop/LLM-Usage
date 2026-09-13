@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   refreshIntervalSeconds: 60,
   alwaysOnTop: true,
   launchOnStartup: false,
+  visibleProviders: ["codex", "claude", "gemini"],
   normalWidth: 280,
   normalHeight: 440
 };
@@ -21,6 +22,7 @@ type Slots = Record<ProviderName, Slot>;
 
 const PROVIDERS: ProviderName[] = ["codex", "claude", "gemini"];
 const PROVIDER_MARK: Record<ProviderName, string> = { codex: "C", claude: "A", gemini: "G" };
+const PROVIDER_LABEL: Record<ProviderName, string> = { codex: "CODEX", claude: "CLAUDE", gemini: "GEMINI" };
 const initialSlots: Slots = {
   codex: { refreshing: false },
   claude: { refreshing: false },
@@ -50,9 +52,9 @@ function normalizeProvider(result: RefreshResult, provider: ProviderName) {
   return result.providers.find((item) => item.provider === provider);
 }
 
-function nextReset(slots: Slots) {
-  const values = Object.values(slots)
-    .map((slot) => slot.lastGood?.windows[0]?.resetsAt)
+function nextReset(slots: Slots, providers: ProviderName[]) {
+  const values = providers
+    .map((provider) => slots[provider].lastGood?.windows[0]?.resetsAt)
     .filter((value): value is string => Boolean(value));
   return values.sort()[0];
 }
@@ -66,9 +68,17 @@ export function App() {
   const now = useClock();
   const resetRefreshRef = useRef<string | undefined>(undefined);
   const currentWindow = useMemo(() => getCurrentWindow(), []);
+  const visibleProviders = useMemo(
+    () => PROVIDERS.filter((provider) => settings.visibleProviders.includes(provider)),
+    [settings.visibleProviders]
+  );
 
-  const resizeForMode = useCallback(async (mode: DisplayMode, normalWidth = 280, normalHeight = 440) => {
-    const sizes: Record<DisplayMode, [number, number]> = { normal: [normalWidth, normalHeight], mini: [248, 100], collapsed: [278, 42] };
+  const resizeForMode = useCallback(async (mode: DisplayMode, normalWidth = 280, normalHeight = 440, providerCount = PROVIDERS.length) => {
+    const sizes: Record<DisplayMode, [number, number]> = {
+      normal: [normalWidth, normalHeight],
+      mini: [248, 48 + Math.max(1, providerCount) * 31],
+      collapsed: [130 + Math.max(0, providerCount - 1) * 74, 42]
+    };
     const [width, height] = sizes[mode];
     try {
       await setWindowSize(width, height);
@@ -85,9 +95,9 @@ export function App() {
     if (settingsOpen) {
       await setWindowSize(settings.normalWidth, settings.normalHeight).catch(() => undefined);
     } else {
-      await resizeForMode(mode, settings.normalWidth, settings.normalHeight);
+      await resizeForMode(mode, settings.normalWidth, settings.normalHeight, visibleProviders.length);
     }
-  }, [resizeForMode, settings.normalHeight, settings.normalWidth, settingsOpen]);
+  }, [resizeForMode, settings.normalHeight, settings.normalWidth, settingsOpen, visibleProviders.length]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -124,10 +134,17 @@ export function App() {
 
   useEffect(() => {
     loadSettings().then((loaded) => {
-      const merged = { ...DEFAULT_SETTINGS, ...loaded };
+      const restoredProviders = Array.isArray(loaded.visibleProviders)
+        ? PROVIDERS.filter((provider) => loaded.visibleProviders.includes(provider))
+        : DEFAULT_SETTINGS.visibleProviders;
+      const merged = {
+        ...DEFAULT_SETTINGS,
+        ...loaded,
+        visibleProviders: restoredProviders.length > 0 ? restoredProviders : DEFAULT_SETTINGS.visibleProviders
+      };
       setSettings(merged);
       setReady(true);
-      void resizeForMode(merged.mode, merged.normalWidth, merged.normalHeight);
+      void resizeForMode(merged.mode, merged.normalWidth, merged.normalHeight, merged.visibleProviders.length);
       void refresh();
     }).catch(() => {
       setReady(true);
@@ -142,7 +159,7 @@ export function App() {
   }, [ready, refresh, settings.refreshIntervalSeconds]);
 
   useEffect(() => {
-    const resetAt = nextReset(slots);
+    const resetAt = nextReset(slots, visibleProviders);
     if (!resetAt || resetRefreshRef.current === resetAt) return;
     const delay = new Date(resetAt).getTime() - Date.now() + 750;
     if (delay <= 0) {
@@ -155,7 +172,7 @@ export function App() {
       void refresh();
     }, Math.min(delay, 2_147_000_000));
     return () => window.clearTimeout(timer);
-  }, [slots, refresh]);
+  }, [slots, refresh, visibleProviders]);
 
   useEffect(() => {
     let unlistenMove: (() => void) | undefined;
@@ -223,7 +240,7 @@ export function App() {
 
   const closeSettings = async () => {
     setSettingsOpen(false);
-    await resizeForMode(settings.mode, settings.normalWidth, settings.normalHeight);
+    await resizeForMode(settings.mode, settings.normalWidth, settings.normalHeight, visibleProviders.length);
   };
 
   const beginDrag = (event: React.MouseEvent) => {
@@ -237,6 +254,21 @@ export function App() {
     await saveSettings({ ...settings, alwaysOnTop: next }).catch(() => undefined);
   };
 
+  const toggleProvider = async (provider: ProviderName) => {
+    const currentlyVisible = settings.visibleProviders.includes(provider);
+    if (currentlyVisible && visibleProviders.length === 1) return;
+    const nextVisible = PROVIDERS.filter((item) => (
+      item === provider ? !currentlyVisible : settings.visibleProviders.includes(item)
+    ));
+    const next = { ...settings, visibleProviders: nextVisible };
+    setSettings(next);
+    await saveSettings(next).catch(() => undefined);
+    if (!settingsOpen) {
+      await resizeForMode(next.mode, next.normalWidth, next.normalHeight, nextVisible.length);
+    }
+    if (!currentlyVisible) void refresh();
+  };
+
   const currentStatus = (provider: ProviderName): ProviderStatus | "stale" | "refreshing" => {
     const slot = slots[provider];
     if (slot.refreshing && slot.lastGood) return "refreshing";
@@ -245,8 +277,8 @@ export function App() {
   };
 
   const displayUsage = (provider: ProviderName) => slots[provider].lastGood ?? slots[provider].latest;
-  const updatedAt = PROVIDERS.map((provider) => slots[provider].lastGood?.updatedAt).find(Boolean);
-  const footerStatus = refreshing ? "REFRESHING" : PROVIDERS.some((provider) => slots[provider].issue) ? "STALE / CHECK" : "LIVE";
+  const updatedAt = visibleProviders.map((provider) => slots[provider].lastGood?.updatedAt).find(Boolean);
+  const footerStatus = refreshing ? "REFRESHING" : visibleProviders.some((provider) => slots[provider].issue) ? "STALE / CHECK" : "LIVE";
 
   return (
     <div className={`app-shell mode-${settings.mode}`} style={{ opacity: settings.opacity }}>
@@ -260,7 +292,7 @@ export function App() {
 
       {settings.mode === "collapsed" ? (
         <div className="collapsed-content" onMouseDown={beginDrag}>
-          {PROVIDERS.map((provider, index) => (
+          {visibleProviders.map((provider, index) => (
             <Fragment key={provider}>
               {index > 0 && <span className="collapsed-divider">◆</span>}
               <div className={`collapsed-provider provider--${provider}`}><b>{PROVIDER_MARK[provider]}</b><span>{displayUsage(provider)?.windows[0]?.usedPercent ?? "—"}%</span></div>
@@ -270,11 +302,11 @@ export function App() {
         </div>
       ) : settings.mode === "mini" ? (
         <main className="mini-content">
-          {PROVIDERS.map((provider) => <ProviderCard key={provider} provider={provider} usage={displayUsage(provider)} status={currentStatus(provider)} message={slots[provider].issue} compact />)}
+          {visibleProviders.map((provider) => <ProviderCard key={provider} provider={provider} usage={displayUsage(provider)} status={currentStatus(provider)} message={slots[provider].issue} compact />)}
         </main>
       ) : (
         <main className="normal-content">
-          {PROVIDERS.map((provider, index) => (
+          {visibleProviders.map((provider, index) => (
             <Fragment key={provider}>
               {index > 0 && <div className="section-rule" />}
               <ProviderCard provider={provider} usage={displayUsage(provider)} status={currentStatus(provider)} message={slots[provider].issue} />
@@ -295,6 +327,21 @@ export function App() {
         <aside className="settings-panel">
           <div className="settings-heading"><span>CONTROL PANEL</span><button onClick={() => void closeSettings()} aria-label="Close settings">×</button></div>
           <label className="setting-row"><span>MODE</span><select value={settings.mode} onChange={(event) => void applyMode(event.target.value as DisplayMode)}><option value="normal">NORMAL</option><option value="mini">MINI</option><option value="collapsed">COLLAPSED</option></select></label>
+          <div className="setting-providers">
+            <span className="setting-providers__title">VISIBLE AIS</span>
+            <div className="setting-providers__options">
+              {PROVIDERS.map((provider) => {
+                const checked = settings.visibleProviders.includes(provider);
+                return (
+                  <label key={provider} className="provider-choice">
+                    <input type="checkbox" checked={checked} disabled={checked && visibleProviders.length === 1} onChange={() => void toggleProvider(provider)} />
+                    <span className={`provider-check provider--${provider}`} />
+                    {PROVIDER_LABEL[provider]}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
           <label className="setting-row"><span>OPACITY <b>{Math.round(settings.opacity * 100)}%</b></span><input type="range" min="0.72" max="1" step="0.01" value={settings.opacity} onChange={(event) => void setPreference("opacity", Number(event.target.value))} /></label>
           <label className="setting-row"><span>REFRESH <b>{settings.refreshIntervalSeconds}s</b></span><input type="range" min="30" max="300" step="30" value={settings.refreshIntervalSeconds} onChange={(event) => void setPreference("refreshIntervalSeconds", Number(event.target.value))} /></label>
           <div className="setting-row"><span>TOGGLE WIDGET</span><b>CTRL+ALT+L</b></div>

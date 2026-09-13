@@ -11,6 +11,7 @@ pub struct AppSettings {
     pub refresh_interval_seconds: u64,
     pub always_on_top: bool,
     pub launch_on_startup: bool,
+    pub visible_providers: Vec<String>,
     pub normal_width: u32,
     pub normal_height: u32,
     pub position_x: Option<i32>,
@@ -33,11 +34,38 @@ impl Default for AppSettings {
             refresh_interval_seconds: 60,
             always_on_top: true,
             launch_on_startup: false,
+            visible_providers: vec![
+                "codex".to_string(),
+                "claude".to_string(),
+                "gemini".to_string(),
+            ],
             normal_width: 280,
             normal_height: 440,
             position_x: None,
             position_y: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_settings_gain_all_default_providers() {
+        let settings: AppSettings = serde_json::from_str(
+            r#"{
+                "mode": "normal",
+                "opacity": 1.0,
+                "refreshIntervalSeconds": 60,
+                "alwaysOnTop": true,
+                "launchOnStartup": false,
+                "normalWidth": 280,
+                "normalHeight": 440
+            }"#,
+        )
+        .expect("legacy settings should deserialize");
+        assert_eq!(settings.visible_providers, ["codex", "claude", "gemini"]);
     }
 }
 

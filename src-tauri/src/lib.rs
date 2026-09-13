@@ -42,25 +42,42 @@ fn toggle_window(app: &AppHandle) {
 }
 
 #[tauri::command]
-fn get_usage() -> RefreshResult {
-    let codex = std::thread::spawn(|| CodexProvider::default().get_usage());
-    let claude = std::thread::spawn(|| ClaudeProvider::default().get_usage());
-    let gemini = std::thread::spawn(|| GeminiProvider::default().get_usage());
-    RefreshResult {
-        providers: vec![
+fn get_usage(store: State<'_, Store>) -> RefreshResult {
+    let enabled = store.0.load().visible_providers;
+    let is_enabled = |provider: &str| enabled.iter().any(|item| item == provider);
+    let codex =
+        is_enabled("codex").then(|| std::thread::spawn(|| CodexProvider::default().get_usage()));
+    let claude =
+        is_enabled("claude").then(|| std::thread::spawn(|| ClaudeProvider::default().get_usage()));
+    let gemini =
+        is_enabled("gemini").then(|| std::thread::spawn(|| GeminiProvider::default().get_usage()));
+    let mut providers = Vec::new();
+    if let Some(codex) = codex {
+        providers.push(
             codex
                 .join()
                 .unwrap_or_else(|_| CodexProvider::default().unavailable("collector crashed"))
                 .into_usage(),
+        );
+    }
+    if let Some(claude) = claude {
+        providers.push(
             claude
                 .join()
                 .unwrap_or_else(|_| ClaudeProvider::default().unavailable("collector crashed"))
                 .into_usage(),
+        );
+    }
+    if let Some(gemini) = gemini {
+        providers.push(
             gemini
                 .join()
                 .unwrap_or_else(|_| GeminiProvider::default().unavailable("collector crashed"))
                 .into_usage(),
-        ],
+        );
+    }
+    RefreshResult {
+        providers,
         fetched_at: providers::now_iso(),
     }
 }
