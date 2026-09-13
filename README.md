@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/ai-limits-hero.svg" alt="AI Limits — local usage monitor for Codex and Claude Code" width="100%" />
+  <img src="docs/ai-limits-hero.svg" alt="AI Limits — local usage monitor for Codex, Claude Code e Gemini CLI" width="100%" />
 </div>
 
 <h1 align="center">AI Limits</h1>
@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Seus limites de IA, sempre à vista.</strong><br />
   Um widget Windows compacto, local-first e sem telemetria para acompanhar<br />
-  as janelas de uso do Codex e do Claude Code em tempo real.
+  as janelas de uso do Codex, do Claude Code e do Gemini CLI em tempo real.
 </p>
 
 <p align="center">
@@ -32,7 +32,8 @@ AI Limits elimina a pergunta _“quanto ainda posso usar?”_ antes que ela inte
 - **Always on top:** fica visível sem disputar espaço com seu editor.
 - **Atualização automática:** refresh configurável entre 30 e 300 segundos.
 - **Countdown de reset:** nova coleta automática quando uma janela reinicia.
-- **Resiliência por provider:** uma falha no Codex não derruba o Claude — e vice-versa.
+- **Resiliência por provider:** uma falha em um CLI não derruba os demais.
+- **Providers selecionáveis:** escolha nas configurações quais IAs aparecem e são consultadas.
 - **Último valor conhecido:** dados válidos continuam visíveis com indicação `STALE`.
 - **Tray e atalho global:** `Ctrl + Alt + L` mostra ou esconde o widget.
 - **Memória de layout:** posição, tamanho, opacidade e modo são persistidos localmente.
@@ -43,6 +44,7 @@ AI Limits elimina a pergunta _“quanto ainda posso usar?”_ antes que ela inte
 flowchart LR
     C[Codex CLI] -->|account/rateLimits/read| R[Collectors em Rust]
     A[Claude Code CLI] -->|/usage| R
+    G[Gemini CLI] -->|/stats| R
     R --> N[Modelo normalizado]
     N --> U[Widget React + Tauri]
     U --> S[(settings.json local)]
@@ -50,7 +52,7 @@ flowchart LR
     classDef provider fill:#102521,stroke:#5af2c5,color:#dffbf1;
     classDef core fill:#241a12,stroke:#ffae5d,color:#fff1df;
     classDef ui fill:#111c1d,stroke:#789b92,color:#d9e9e4;
-    class C,A provider;
+    class C,A,G provider;
     class R,N core;
     class U,S ui;
 ```
@@ -64,7 +66,7 @@ O backend Rust executa os CLIs oficiais em processos ocultos, aplica timeout, no
 - Windows 10/11 com WebView2;
 - Node.js 20+ e npm;
 - Rust stable com toolchain MSVC e Windows SDK;
-- Codex CLI e/ou Claude Code instalados e autenticados.
+- Pelo menos um dos clientes Codex CLI, Claude Code ou Gemini CLI instalado e autenticado.
 
 ### Desenvolvimento
 
@@ -75,7 +77,7 @@ npm install
 npm run tauri dev
 ```
 
-O app aceita apenas um provider disponível; o outro será mostrado como `Unavailable` sem impedir o funcionamento.
+O app funciona com apenas um provider disponível. Os demais podem ser ocultados em **Settings → Visible AIs**; providers desmarcados não são consultados.
 
 ### Build standalone
 
@@ -97,8 +99,9 @@ O instalador está desativado no momento para manter o build mínimo. O `.exe` r
 | :-- | :-- | :-- | :-- |
 | **Codex** | Percentual usado, duração e horário de reset das janelas primária e secundária | `codex app-server --stdio` → `account/rateLimits/read` | `Unavailable` ou último valor válido como `STALE` |
 | **Claude Code** | Sessão atual, semana atual e respectivos resets | `claude -p "/usage" --output-format json` | `Unavailable` ou último valor válido como `STALE` |
+| **Gemini CLI** | Percentual usado e reset das cotas Pro, Flash e Flash Lite | `/stats` do Gemini CLI em um pseudo-terminal oculto | `Unavailable` ou último valor válido como `STALE` |
 
-No Codex, `remainingPercent` é somente `100 - usedPercent`. No Claude, o mesmo cálculo usa o percentual devolvido pelo próprio `/usage`. O reset textual do Claude é convertido para um timestamp local apenas para alimentar o countdown.
+No Codex, `remainingPercent` é somente `100 - usedPercent`. No Claude, o mesmo cálculo usa o percentual devolvido pelo próprio `/usage`. No Gemini, as cotas por modelo são agrupadas pelas famílias Pro, Flash e Flash Lite, seguindo a apresentação do CLI. Resets textuais são convertidos para timestamps locais apenas para alimentar o countdown.
 
 ## Privacidade por design
 
@@ -122,6 +125,7 @@ As preferências ficam em `settings.json`, no diretório de configuração da ap
 | Alternar `NORMAL` / `MINI` | Duplo clique na barra ou botão de modo |
 | Atualizar agora | Botão `↻` ou menu do tray |
 | Restaurar, mudar modo ou sair | Menu do tray |
+| Escolher as IAs exibidas | `CONTROL PANEL` → `VISIBLE AIS` |
 | Ajustar tamanho, opacidade e intervalo | Painel `CONTROL PANEL` |
 
 ## Stack
@@ -132,7 +136,7 @@ As preferências ficam em `settings.json`, no diretório de configuração da ap
 | Interface | [React 19](https://react.dev/) + TypeScript |
 | Backend local | Rust |
 | Tooling | Vite 8 |
-| Integrações | Codex app-server + Claude Code CLI |
+| Integrações | Codex app-server + Claude Code CLI + Gemini CLI |
 
 ## Validação
 
@@ -143,7 +147,7 @@ npm run build
 # Testes unitários do backend
 cargo test --manifest-path src-tauri/Cargo.toml
 
-# Smoke test real — requer ambos os CLIs autenticados
+# Smoke test real — requer os três CLIs autenticados
 cargo test --manifest-path src-tauri/Cargo.toml -- --ignored live_collectors_smoke_test
 ```
 
@@ -151,6 +155,7 @@ cargo test --manifest-path src-tauri/Cargo.toml -- --ignored live_collectors_smo
 
 - `account/rateLimits/read` é uma interface experimental do app-server do Codex e pode mudar entre versões do CLI.
 - O `/usage` do Claude chega em um envelope JSON, mas seu conteúdo útil ainda é textual; mudanças nos rótulos podem exigir atualização do parser.
+- O Gemini ainda expõe as cotas por uma tela interativa; o coletor usa `/stats` em um pseudo-terminal e aceita os formatos atual e legado da tabela.
 - A aplicação é focada em Windows e não tenta substituir os mecanismos oficiais por scraping de sites.
 
 ## Contribuindo

@@ -1,6 +1,6 @@
 <svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">AI Limits</title>
-  <desc id="desc">Local usage monitor for Codex and Claude Code on Windows</desc>
+  <desc id="desc">Local usage monitor for Codex, Claude Code, and Gemini CLI on Windows</desc>
   <defs>
     <linearGradient id="bg" x1="50" y1="15" x2="1150" y2="520" gradientUnits="userSpaceOnUse">
       <stop stop-color="#0D1C1B"/><stop offset=".5" stop-color="#091112"/><stop offset="1" stop-color="#151512"/>
@@ -36,7 +36,7 @@
     <text x="2" y="149" fill="#8CA59F" font-size="18" letter-spacing=".4">YOUR AI USAGE. ALWAYS IN SIGHT.</text>
 
     <g transform="translate(2 191)" font-size="13">
-      <rect width="9" height="9" fill="#5AF2C5"/><text x="23" y="10" fill="#B9CDC8">CODEX + CLAUDE CODE</text>
+      <rect width="9" height="9" fill="#5AF2C5"/><text x="23" y="10" fill="#B9CDC8">CODEX + CLAUDE + GEMINI</text>
       <rect y="34" width="9" height="9" fill="#FFAE5D"/><text x="23" y="44" fill="#B9CDC8">NO BACKEND. NO TELEMETRY.</text>
       <rect y="68" width="9" height="9" fill="#769D93"/><text x="23" y="78" fill="#B9CDC8">NATIVE, COMPACT, RESILIENT.</text>
     </g>

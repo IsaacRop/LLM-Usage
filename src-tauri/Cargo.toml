@@ -1,7 +1,7 @@
 [package]
 name = "llm-usage-monitor"
 version = "0.1.0"
-description = "A local-first Codex and Claude Code subscription usage HUD"
+description = "A local-first Codex, Claude Code, and Gemini CLI subscription usage HUD"
 authors = ["LLM Usage Monitor"]
 edition = "2021"
 
