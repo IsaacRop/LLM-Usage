@@ -1,4 +1,4 @@
-export type ProviderName = "codex" | "claude";
+export type ProviderName = "codex" | "claude" | "gemini";
 export type ProviderStatus = "available" | "partial" | "unavailable" | "error";
 export type DisplayMode = "normal" | "mini" | "collapsed";
 

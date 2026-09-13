@@ -1,7 +1,7 @@
 mod providers;
 mod settings;
 
-use providers::{ClaudeProvider, CodexProvider, ProviderUsage, UsageProvider};
+use providers::{ClaudeProvider, CodexProvider, GeminiProvider, ProviderUsage, UsageProvider};
 use settings::{AppSettings, SettingsStore};
 use std::sync::Arc;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -45,6 +45,7 @@ fn toggle_window(app: &AppHandle) {
 fn get_usage() -> RefreshResult {
     let codex = std::thread::spawn(|| CodexProvider::default().get_usage());
     let claude = std::thread::spawn(|| ClaudeProvider::default().get_usage());
+    let gemini = std::thread::spawn(|| GeminiProvider::default().get_usage());
     RefreshResult {
         providers: vec![
             codex
@@ -54,6 +55,10 @@ fn get_usage() -> RefreshResult {
             claude
                 .join()
                 .unwrap_or_else(|_| ClaudeProvider::default().unavailable("collector crashed"))
+                .into_usage(),
+            gemini
+                .join()
+                .unwrap_or_else(|_| GeminiProvider::default().unavailable("collector crashed"))
                 .into_usage(),
         ],
         fetched_at: providers::now_iso(),

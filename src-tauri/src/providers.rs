@@ -1,6 +1,8 @@
 use chrono::{DateTime, Datelike, Local, NaiveDateTime, TimeZone, Timelike, Utc};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
@@ -135,6 +137,112 @@ fn claude_command() -> (Command, bool) {
     #[cfg(not(windows))]
     {
         (hidden_command("claude"), true)
+    }
+}
+
+fn gemini_command() -> (String, Vec<String>) {
+    #[cfg(windows)]
+    {
+        let mut candidates = Vec::new();
+        if let Some(app_data) = std::env::var_os("APPDATA") {
+            candidates.push(PathBuf::from(app_data).join("npm").join("gemini.cmd"));
+        }
+        let executable = find_executable(&candidates)
+            .map(|path| format!("\"{}\"", path.display()))
+            .unwrap_or_else(|| "gemini".to_string());
+        return (
+            "cmd.exe".to_string(),
+            vec![
+                "/D".to_string(),
+                "/S".to_string(),
+                "/C".to_string(),
+                format!("{executable} --prompt-interactive \"/stats\" --screen-reader"),
+            ],
+        );
+    }
+    #[cfg(not(windows))]
+    {
+        (
+            "gemini".to_string(),
+            vec![
+                "--prompt-interactive".to_string(),
+                "/stats".to_string(),
+                "--screen-reader".to_string(),
+            ],
+        )
+    }
+}
+
+fn capture_pty(program: String, args: Vec<String>) -> Result<Vec<u8>, String> {
+    let pair = native_pty_system()
+        .openpty(PtySize {
+            rows: 60,
+            cols: 180,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|error| error.to_string())?;
+    let mut command = CommandBuilder::new(program);
+    command.args(args);
+    let mut child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(|error| error.to_string())?;
+    drop(pair.slave);
+
+    let mut reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|error| error.to_string())?;
+    let (sender, receiver) = mpsc::channel::<Vec<u8>>();
+    thread::spawn(move || {
+        let mut buffer = [0u8; 4096];
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => {
+                    if sender.send(buffer[..read].to_vec()).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    let started = Instant::now();
+    let mut last_output = Instant::now();
+    let mut output = Vec::new();
+    while started.elapsed() < Duration::from_secs(20) {
+        match receiver.recv_timeout(Duration::from_millis(100)) {
+            Ok(chunk) => {
+                output.extend_from_slice(&chunk);
+                last_output = Instant::now();
+                if output.len() > 2_000_000 {
+                    output.drain(..output.len() - 2_000_000);
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+        if child
+            .try_wait()
+            .map_err(|error| error.to_string())?
+            .is_some()
+        {
+            break;
+        }
+        let text = String::from_utf8_lossy(&output).to_ascii_lowercase();
+        let has_usage = text.contains("model usage") && text.contains('%');
+        if has_usage && last_output.elapsed() > Duration::from_millis(900) {
+            break;
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    if output.is_empty() {
+        Err("no output".to_string())
+    } else {
+        Ok(output)
     }
 }
 
@@ -328,6 +436,202 @@ impl Default for ClaudeProvider {
         Self
     }
 }
+
+pub struct GeminiProvider;
+impl Default for GeminiProvider {
+    fn default() -> Self {
+        Self
+    }
+}
+impl GeminiProvider {
+    pub fn unavailable(&self, message: &str) -> ProviderUsageResult {
+        ProviderUsageResult(ProviderUsage {
+            provider: "gemini".to_string(),
+            status: status_for_message(message),
+            windows: vec![],
+            updated_at: now_iso(),
+            message: Some(message.to_string()),
+            source: Some("Gemini CLI /stats".to_string()),
+        })
+    }
+}
+impl UsageProvider for GeminiProvider {
+    fn get_usage(self) -> ProviderUsageResult {
+        let (program, args) = gemini_command();
+        let bytes = match capture_pty(program, args) {
+            Ok(output) => output,
+            Err(error) => return self.unavailable(&safe_status_message(&error)),
+        };
+        let text = strip_terminal_controls(&String::from_utf8_lossy(&bytes));
+        let lower = text.to_ascii_lowercase();
+        if lower.contains("sign in")
+            || lower.contains("login")
+            || lower.contains("authentication required")
+        {
+            return self.unavailable("NOT LOGGED IN");
+        }
+        let windows = parse_gemini_usage(&text);
+        if windows.is_empty() {
+            return self.unavailable("DATA UNAVAILABLE");
+        }
+        ProviderUsageResult(ProviderUsage {
+            provider: "gemini".to_string(),
+            status: ProviderStatus::Available,
+            windows,
+            updated_at: now_iso(),
+            message: None,
+            source: Some("Gemini CLI /stats".to_string()),
+        })
+    }
+}
+
+fn strip_terminal_controls(text: &str) -> String {
+    #[derive(Clone, Copy)]
+    enum EscapeState {
+        Text,
+        Escape,
+        Csi,
+        Osc,
+        OscEscape,
+    }
+
+    let mut state = EscapeState::Text;
+    let mut output = String::with_capacity(text.len());
+    for character in text.chars() {
+        state = match state {
+            EscapeState::Text if character == '\u{1b}' => EscapeState::Escape,
+            EscapeState::Text => {
+                if character == '\r' || character == '\n' {
+                    output.push('\n');
+                } else if !character.is_control() {
+                    if ('\u{2500}'..='\u{259f}').contains(&character)
+                        || ('\u{2800}'..='\u{28ff}').contains(&character)
+                    {
+                        output.push(' ');
+                    } else {
+                        output.push(character);
+                    }
+                }
+                EscapeState::Text
+            }
+            EscapeState::Escape if character == '[' => EscapeState::Csi,
+            EscapeState::Escape if character == ']' => EscapeState::Osc,
+            EscapeState::Escape => EscapeState::Text,
+            EscapeState::Csi if ('@'..='~').contains(&character) => EscapeState::Text,
+            EscapeState::Csi => EscapeState::Csi,
+            EscapeState::Osc if character == '\u{7}' => EscapeState::Text,
+            EscapeState::Osc if character == '\u{1b}' => EscapeState::OscEscape,
+            EscapeState::Osc => EscapeState::Osc,
+            EscapeState::OscEscape if character == '\\' => EscapeState::Text,
+            EscapeState::OscEscape => EscapeState::Osc,
+        };
+    }
+    output
+}
+
+fn parse_percentage(line: &str) -> Option<f64> {
+    line.split_whitespace().find_map(|token| {
+        let token = token.trim_matches(|character: char| {
+            !character.is_ascii_digit() && character != '.' && character != '%'
+        });
+        token
+            .strip_suffix('%')
+            .and_then(|number| number.parse::<f64>().ok())
+    })
+}
+
+fn gemini_tier(model: &str) -> Option<&'static str> {
+    let lower = model.to_ascii_lowercase();
+    if lower.contains("flash-lite") || lower.contains("flash lite") {
+        Some("FLASH LITE")
+    } else if lower.contains("flash") {
+        Some("FLASH")
+    } else if lower.contains("pro") {
+        Some("PRO")
+    } else {
+        None
+    }
+}
+
+fn parse_relative_reset(line: &str) -> Option<String> {
+    let lower = line.to_ascii_lowercase();
+    let duration = if let Some(index) = lower.find("resets in ") {
+        &lower[index + "resets in ".len()..]
+    } else if let Some(index) = lower.find("resets:") {
+        let reset = &lower[index + "resets:".len()..];
+        let open = reset.rfind('(')?;
+        reset.get(open + 1..reset.rfind(')')?)?
+    } else {
+        return None;
+    };
+
+    let mut minutes = 0i64;
+    for token in duration.split_whitespace() {
+        let token = token.trim_matches(|character: char| !character.is_ascii_alphanumeric());
+        let (number, unit) = token.split_at(token.len().saturating_sub(1));
+        let Ok(value) = number.parse::<i64>() else {
+            continue;
+        };
+        minutes += match unit {
+            "d" => value * 24 * 60,
+            "h" => value * 60,
+            "m" => value,
+            _ => 0,
+        };
+    }
+    (minutes > 0).then(|| (Utc::now() + chrono::Duration::minutes(minutes)).to_rfc3339())
+}
+
+fn parse_gemini_usage(text: &str) -> Vec<UsageWindow> {
+    let mut tiers: BTreeMap<&'static str, UsageWindow> = BTreeMap::new();
+    for raw_line in text.lines() {
+        let line = raw_line.split_whitespace().collect::<Vec<_>>().join(" ");
+        let lower = line.to_ascii_lowercase();
+        let legacy_model = lower
+            .split_whitespace()
+            .find(|token| token.contains("gemini-"))
+            .map(|token| {
+                token.trim_matches(|character: char| {
+                    !character.is_ascii_alphanumeric() && character != '-' && character != '.'
+                })
+            });
+        let tier = legacy_model
+            .and_then(gemini_tier)
+            .or_else(|| gemini_tier(&line));
+        let Some(tier) = tier else {
+            continue;
+        };
+        let Some(percent) = parse_percentage(&line) else {
+            continue;
+        };
+        let used = if legacy_model.is_some() {
+            100.0 - percent
+        } else {
+            percent
+        }
+        .round()
+        .clamp(0.0, 100.0) as i32;
+        let window = UsageWindow {
+            used_percent: Some(used),
+            remaining_percent: Some(100 - used),
+            resets_at: parse_relative_reset(&line),
+            window_minutes: Some(1440),
+            label: tier.to_string(),
+        };
+        let should_replace = tiers
+            .get(tier)
+            .and_then(|current| current.used_percent)
+            .map(|current| used >= current)
+            .unwrap_or(true);
+        if should_replace {
+            tiers.insert(tier, window);
+        }
+    }
+    ["PRO", "FLASH", "FLASH LITE"]
+        .iter()
+        .filter_map(|tier| tiers.remove(tier))
+        .collect()
+}
 impl ClaudeProvider {
     pub fn unavailable(&self, message: &str) -> ProviderUsageResult {
         ProviderUsageResult(ProviderUsage {
@@ -496,10 +800,49 @@ mod tests {
     }
 
     #[test]
+    fn parses_current_gemini_tier_usage() {
+        let text = "Model usage\nPro       ███░  27%  Resets: 3:30 PM (4h 12m)\nFlash     █░░░   8%  Resets: 4:00 PM (4h 42m)\nFlash Lite ████ 91%  Resets: 2:00 PM (2h 42m)";
+        let windows = parse_gemini_usage(text);
+        assert_eq!(windows.len(), 3);
+        assert_eq!(windows[0].label, "PRO");
+        assert_eq!(windows[0].used_percent, Some(27));
+        assert_eq!(windows[0].remaining_percent, Some(73));
+        assert!(windows[0].resets_at.is_some());
+        assert_eq!(windows[2].label, "FLASH LITE");
+        assert_eq!(windows[2].used_percent, Some(91));
+    }
+
+    #[test]
+    fn parses_and_groups_legacy_gemini_usage_left() {
+        let text = "Model Usage Reqs Usage left\n\
+            gemini-2.5-flash-lite 1023 3.9% (Resets in 21h 27m)\n\
+            gemini-3-pro-preview 8 81.0% (Resets in 6h 25m)\n\
+            gemini-3-flash-preview 16 96.4% (Resets in 6h 56m)\n\
+            gemini-2.5-pro 2 72.0% (Resets in 6h 25m)";
+        let windows = parse_gemini_usage(text);
+        assert_eq!(windows.len(), 3);
+        assert_eq!(windows[0].label, "PRO");
+        assert_eq!(windows[0].used_percent, Some(28));
+        assert_eq!(windows[1].label, "FLASH");
+        assert_eq!(windows[1].used_percent, Some(4));
+        assert_eq!(windows[2].label, "FLASH LITE");
+        assert_eq!(windows[2].used_percent, Some(96));
+    }
+
+    #[test]
+    fn removes_terminal_escape_sequences_before_parsing() {
+        let text = "\u{1b}[32mPro\u{1b}[0m ███ 42% Resets: 3:30 PM (2h)";
+        let clean = strip_terminal_controls(text);
+        let windows = parse_gemini_usage(&clean);
+        assert_eq!(windows[0].used_percent, Some(42));
+    }
+
+    #[test]
     #[ignore = "live provider smoke test; requires the local authenticated CLIs"]
     fn live_collectors_smoke_test() {
         let codex = CodexProvider::default().get_usage().into_usage();
         let claude = ClaudeProvider::default().get_usage().into_usage();
+        let gemini = GeminiProvider::default().get_usage().into_usage();
         assert!(matches!(
             codex.status,
             ProviderStatus::Available | ProviderStatus::Partial
@@ -508,7 +851,12 @@ mod tests {
             claude.status,
             ProviderStatus::Available | ProviderStatus::Partial
         ));
+        assert!(matches!(
+            gemini.status,
+            ProviderStatus::Available | ProviderStatus::Partial
+        ));
         assert!(!codex.windows.is_empty());
         assert!(!claude.windows.is_empty());
+        assert!(!gemini.windows.is_empty());
     }
 }

@@ -9,8 +9,8 @@ type Props = {
   compact?: boolean;
 };
 
-const providerLabel: Record<ProviderName, string> = { codex: "CODEX", claude: "CLAUDE" };
-const providerMark: Record<ProviderName, string> = { codex: "C", claude: "A" };
+const providerLabel: Record<ProviderName, string> = { codex: "CODEX", claude: "CLAUDE", gemini: "GEMINI" };
+const providerMark: Record<ProviderName, string> = { codex: "C", claude: "A", gemini: "G" };
 
 function windowLabel(window: UsageWindow, index: number) {
   if (window.label) return window.label;

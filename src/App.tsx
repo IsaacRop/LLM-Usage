@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { PixelBar } from "./components/PixelBar";
@@ -19,7 +19,13 @@ const DEFAULT_SETTINGS: AppSettings = {
 type Slot = { lastGood?: ProviderUsage; latest?: ProviderUsage; issue?: string; refreshing: boolean };
 type Slots = Record<ProviderName, Slot>;
 
-const initialSlots: Slots = { codex: { refreshing: false }, claude: { refreshing: false } };
+const PROVIDERS: ProviderName[] = ["codex", "claude", "gemini"];
+const PROVIDER_MARK: Record<ProviderName, string> = { codex: "C", claude: "A", gemini: "G" };
+const initialSlots: Slots = {
+  codex: { refreshing: false },
+  claude: { refreshing: false },
+  gemini: { refreshing: false }
+};
 
 function useClock() {
   const [now, setNow] = useState(() => Date.now());
@@ -62,7 +68,7 @@ export function App() {
   const currentWindow = useMemo(() => getCurrentWindow(), []);
 
   const resizeForMode = useCallback(async (mode: DisplayMode, normalWidth = 280, normalHeight = 440) => {
-    const sizes: Record<DisplayMode, [number, number]> = { normal: [normalWidth, normalHeight], mini: [248, 78], collapsed: [210, 42] };
+    const sizes: Record<DisplayMode, [number, number]> = { normal: [normalWidth, normalHeight], mini: [248, 100], collapsed: [278, 42] };
     const [width, height] = sizes[mode];
     try {
       await setWindowSize(width, height);
@@ -85,12 +91,15 @@ export function App() {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    setSlots((previous) => ({ codex: { ...previous.codex, refreshing: true }, claude: { ...previous.claude, refreshing: true } }));
+    setSlots((previous) => PROVIDERS.reduce<Slots>((updated, provider) => {
+      updated[provider] = { ...previous[provider], refreshing: true };
+      return updated;
+    }, { ...previous }));
     try {
       const result = await refreshUsage();
       setSlots((previous) => {
         const updated = { ...previous };
-        (['codex', 'claude'] as ProviderName[]).forEach((provider) => {
+        PROVIDERS.forEach((provider) => {
           const usage = normalizeProvider(result, provider);
           const hasData = Boolean(usage && usage.windows.length > 0 && (usage.status === "available" || usage.status === "partial"));
           updated[provider] = {
@@ -104,10 +113,10 @@ export function App() {
       });
     } catch (error) {
       const issue = error instanceof Error ? error.message : "Refresh failed";
-      setSlots((previous) => ({
-        codex: { ...previous.codex, issue, refreshing: false },
-        claude: { ...previous.claude, issue, refreshing: false }
-      }));
+      setSlots((previous) => PROVIDERS.reduce<Slots>((updated, provider) => {
+        updated[provider] = { ...previous[provider], issue, refreshing: false };
+        return updated;
+      }, { ...previous }));
     } finally {
       setRefreshing(false);
     }
@@ -236,8 +245,8 @@ export function App() {
   };
 
   const displayUsage = (provider: ProviderName) => slots[provider].lastGood ?? slots[provider].latest;
-  const updatedAt = slots.codex.lastGood?.updatedAt ?? slots.claude.lastGood?.updatedAt;
-  const footerStatus = refreshing ? "REFRESHING" : slots.codex.issue || slots.claude.issue ? "STALE / CHECK" : "LIVE";
+  const updatedAt = PROVIDERS.map((provider) => slots[provider].lastGood?.updatedAt).find(Boolean);
+  const footerStatus = refreshing ? "REFRESHING" : PROVIDERS.some((provider) => slots[provider].issue) ? "STALE / CHECK" : "LIVE";
 
   return (
     <div className={`app-shell mode-${settings.mode}`} style={{ opacity: settings.opacity }}>
@@ -251,21 +260,26 @@ export function App() {
 
       {settings.mode === "collapsed" ? (
         <div className="collapsed-content" onMouseDown={beginDrag}>
-          <div className="collapsed-provider provider--codex"><b>C</b><span>{displayUsage("codex")?.windows[0]?.usedPercent ?? "—"}%</span></div>
-          <span className="collapsed-divider">◆</span>
-          <div className="collapsed-provider provider--claude"><b>A</b><span>{displayUsage("claude")?.windows[0]?.usedPercent ?? "—"}%</span></div>
+          {PROVIDERS.map((provider, index) => (
+            <Fragment key={provider}>
+              {index > 0 && <span className="collapsed-divider">◆</span>}
+              <div className={`collapsed-provider provider--${provider}`}><b>{PROVIDER_MARK[provider]}</b><span>{displayUsage(provider)?.windows[0]?.usedPercent ?? "—"}%</span></div>
+            </Fragment>
+          ))}
           <button className="collapsed-settings" data-tauri-drag-region="false" onMouseDown={(event) => event.stopPropagation()} onClick={() => void (settingsOpen ? closeSettings() : openSettings())} title="Settings" aria-label="Settings">⚙</button>
         </div>
       ) : settings.mode === "mini" ? (
         <main className="mini-content">
-          <ProviderCard provider="codex" usage={displayUsage("codex")} status={currentStatus("codex")} message={slots.codex.issue} compact />
-          <ProviderCard provider="claude" usage={displayUsage("claude")} status={currentStatus("claude")} message={slots.claude.issue} compact />
+          {PROVIDERS.map((provider) => <ProviderCard key={provider} provider={provider} usage={displayUsage(provider)} status={currentStatus(provider)} message={slots[provider].issue} compact />)}
         </main>
       ) : (
         <main className="normal-content">
-          <ProviderCard provider="codex" usage={displayUsage("codex")} status={currentStatus("codex")} message={slots.codex.issue} />
-          <div className="section-rule" />
-          <ProviderCard provider="claude" usage={displayUsage("claude")} status={currentStatus("claude")} message={slots.claude.issue} />
+          {PROVIDERS.map((provider, index) => (
+            <Fragment key={provider}>
+              {index > 0 && <div className="section-rule" />}
+              <ProviderCard provider={provider} usage={displayUsage(provider)} status={currentStatus(provider)} message={slots[provider].issue} />
+            </Fragment>
+          ))}
         </main>
       )}
 
