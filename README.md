@@ -1,8 +1,8 @@
 <div align="center">
-  <img src="docs/ai-limits-hero.svg" alt="AI Limits — local usage monitor for Codex, Claude Code e Gemini CLI" width="100%" />
+  <img src="docs/ai-limits-hero.svg" alt="LLM Usage — local usage monitor for Codex, Claude Code e Gemini CLI" width="100%" />
 </div>
 
-<h1 align="center">AI Limits</h1>
+<h1 align="center">LLM Usage</h1>
 
 <p align="center">
   <strong>Seus limites de IA, sempre à vista.</strong><br />
@@ -22,7 +22,7 @@
 
 ## O que é
 
-AI Limits elimina a pergunta _“quanto ainda posso usar?”_ antes que ela interrompa seu fluxo. Ele consulta os clientes oficiais já autenticados na sua máquina e transforma os limites retornados em um painel discreto, sempre acessível e fácil de ler.
+LLM Usage elimina a pergunta _“quanto ainda posso usar?”_ antes que ela interrompa seu fluxo. Ele consulta os clientes oficiais já autenticados na sua máquina e transforma os limites retornados em um painel discreto, sempre acessível e fácil de ler.
 
 > **Uso real, direto da fonte.** O app não calcula custos, não conta tokens e não inventa estimativas.
 

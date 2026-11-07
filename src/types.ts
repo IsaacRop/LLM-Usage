@@ -1,6 +1,7 @@
 export type ProviderName = "codex" | "claude" | "gemini";
 export type ProviderStatus = "available" | "partial" | "unavailable" | "error";
-export type DisplayMode = "normal" | "mini" | "collapsed";
+export type DisplayMode = "normal" | "mini" | "collapsed" | "docked";
+export type DockEdge = "left" | "right" | "top" | "bottom";
 
 export type UsageWindow = {
   usedPercent?: number;
@@ -26,6 +27,7 @@ export type RefreshResult = {
 
 export type AppSettings = {
   mode: DisplayMode;
+  dockEdge: DockEdge;
   opacity: number;
   refreshIntervalSeconds: number;
   alwaysOnTop: boolean;

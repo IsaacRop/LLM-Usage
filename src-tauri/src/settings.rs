@@ -7,6 +7,7 @@ use std::path::PathBuf;
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub mode: DisplayMode,
+    pub dock_edge: DockEdge,
     pub opacity: f64,
     pub refresh_interval_seconds: u64,
     pub always_on_top: bool,
@@ -18,18 +19,30 @@ pub struct AppSettings {
     pub position_y: Option<i32>,
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DisplayMode {
     Normal,
     Mini,
     Collapsed,
+    Docked,
+}
+
+/// Center point of a screen edge where the widget can be docked.
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DockEdge {
+    Left,
+    Right,
+    Top,
+    Bottom,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             mode: DisplayMode::Normal,
+            dock_edge: DockEdge::Right,
             opacity: 1.0,
             refresh_interval_seconds: 60,
             always_on_top: true,

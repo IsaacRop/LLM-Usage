@@ -9,33 +9,33 @@ type Props = {
   compact?: boolean;
 };
 
-const providerLabel: Record<ProviderName, string> = { codex: "CODEX", claude: "CLAUDE", gemini: "GEMINI" };
+const providerLabel: Record<ProviderName, string> = { codex: "Codex", claude: "Claude", gemini: "Gemini" };
 const providerMark: Record<ProviderName, string> = { codex: "C", claude: "A", gemini: "G" };
 
 function windowLabel(window: UsageWindow, index: number) {
   if (window.label) return window.label;
-  return index === 0 ? "CURRENT" : "SECONDARY";
+  return index === 0 ? "Current" : "Secondary";
 }
 
 function formatCountdown(resetAt?: string) {
-  if (!resetAt) return "↻ —";
+  if (!resetAt) return "Reset —";
   const milliseconds = new Date(resetAt).getTime() - Date.now();
-  if (milliseconds <= 0) return "↻ NOW";
+  if (milliseconds <= 0) return "Reset now";
   const totalMinutes = Math.ceil(milliseconds / 60000);
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
-  if (days > 0) return `↻ ${days}d ${hours}h`;
-  if (hours > 0) return `↻ ${hours}h ${minutes}m`;
-  return `↻ ${minutes}m`;
+  if (days > 0) return `Resets in ${days}d ${hours}h`;
+  if (hours > 0) return `Resets in ${hours}h ${minutes}m`;
+  return `Resets in ${minutes}m`;
 }
 
 function statusText(status: Props["status"], message?: string) {
-  if (status === "refreshing") return "REFRESHING";
-  if (status === "stale") return "STALE DATA";
-  if (status === "unavailable") return "UNAVAILABLE";
-  if (status === "error") return "ERROR";
-  return message ?? "LIVE";
+  if (status === "refreshing") return "Refreshing";
+  if (status === "stale") return "Stale data";
+  if (status === "unavailable") return "Unavailable";
+  if (status === "error") return "Error";
+  return message ?? "Live";
 }
 
 function WindowRow({ window, index }: { window: UsageWindow; index: number }) {
@@ -45,11 +45,11 @@ function WindowRow({ window, index }: { window: UsageWindow; index: number }) {
     <section className="usage-window">
       <div className="window-heading">
         <span>{windowLabel(window, index)}</span>
-        <span className="window-value">{used === undefined ? "—" : `${used}%`} <small>USED</small></span>
+        <span className="window-value">{used === undefined ? "—" : used}<small>{used === undefined ? "" : "%"}</small></span>
       </div>
       <PixelBar window={window} />
       <div className="window-meta">
-        <span>{remaining === undefined ? "REMAINING —" : `${remaining}% REMAINING`}</span>
+        <span>{remaining === undefined ? "Remaining —" : `${remaining}% left`}</span>
         <span title={window.resetsAt ? new Date(window.resetsAt).toLocaleString() : undefined}>{formatCountdown(window.resetsAt)}</span>
       </div>
     </section>
@@ -74,18 +74,18 @@ export function ProviderCard({ provider, usage, status, message, compact = false
   return (
     <article className={`provider-card provider--${provider} provider-status--${status}`}>
       <div className="provider-heading">
-        <div className="provider-title"><span className="provider-square" />{providerLabel[provider]}</div>
+        <div className="provider-title"><span className="provider-square">{providerMark[provider]}</span>{providerLabel[provider]}</div>
         <span className="provider-state"><i />{displayStatus}</span>
       </div>
       {windows.length > 0 ? (
         windows.map((window, index) => <WindowRow key={`${provider}-${index}-${window.label}`} window={window} index={index} />)
       ) : (
         <div className="empty-provider">
-          <span className="empty-glyph">□</span>
+          <span className="empty-glyph">!</span>
           <span>{message ?? displayStatus}</span>
         </div>
       )}
-      {usage?.source && <div className="source-note">SOURCE · {usage.source}</div>}
+      {usage?.source && <div className="source-note">{usage.source}</div>}
     </article>
   );
 }

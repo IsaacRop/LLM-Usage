@@ -370,7 +370,7 @@ impl CodexProvider {
 }
 impl UsageProvider for CodexProvider {
     fn get_usage(self) -> ProviderUsageResult {
-        let init = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"ai-limits","title":"AI Limits","version":"0.1.0"}}}
+        let init = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"llm-usage","title":"LLM Usage","version":"0.1.0"}}}
 {"jsonrpc":"2.0","method":"initialized","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read","params":{}}
 "#;

@@ -2,7 +2,7 @@ mod providers;
 mod settings;
 
 use providers::{ClaudeProvider, CodexProvider, GeminiProvider, ProviderUsage, UsageProvider};
-use settings::{AppSettings, SettingsStore};
+use settings::{AppSettings, DisplayMode, DockEdge, SettingsStore};
 use std::sync::Arc;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -120,8 +120,57 @@ fn start_window_drag(window: Window) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn set_display_mode(store: State<'_, Store>, mode: settings::DisplayMode) -> Result<(), String> {
+fn set_display_mode(store: State<'_, Store>, mode: DisplayMode) -> Result<(), String> {
     store.0.update_mode(mode)
+}
+
+/// Sizes the window (logical px) and places it flush against the center of
+/// the chosen work-area edge of the monitor the window currently lives on.
+#[tauri::command]
+fn dock_window(window: Window, edge: DockEdge, width: f64, height: f64) -> Result<(), String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .ok_or_else(|| "no monitor available".to_string())?;
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let w = (width * scale).round().max(1.0) as i32;
+    let h = (height * scale).round().max(1.0) as i32;
+    let (ax, ay) = (area.position.x, area.position.y);
+    let (aw, ah) = (area.size.width as i32, area.size.height as i32);
+    let (x, y) = match edge {
+        DockEdge::Right => (ax + aw - w, ay + (ah - h) / 2),
+        DockEdge::Left => (ax, ay + (ah - h) / 2),
+        DockEdge::Top => (ax + (aw - w) / 2, ay),
+        DockEdge::Bottom => (ax + (aw - w) / 2, ay + ah - h),
+    };
+    window
+        .set_size(Size::Physical(PhysicalSize::new(w as u32, h as u32)))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_position(Position::Physical(PhysicalPosition { x, y }))
+        .map_err(|error| error.to_string())
+}
+
+/// Global cursor position relative to the window origin, in logical px.
+/// Used for hover detection while the window is click-through.
+#[tauri::command]
+fn cursor_in_window(window: Window) -> Result<(f64, f64), String> {
+    let cursor = window.cursor_position().map_err(|error| error.to_string())?;
+    let origin = window.inner_position().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    Ok((
+        (cursor.x - origin.x as f64) / scale,
+        (cursor.y - origin.y as f64) / scale,
+    ))
+}
+
+#[tauri::command]
+fn set_click_through(window: Window, enabled: bool) -> Result<(), String> {
+    window
+        .set_ignore_cursor_events(enabled)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -132,6 +181,11 @@ fn quit_app(app: AppHandle) {
 fn apply_window_preferences(app: &AppHandle, settings: &AppSettings) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_always_on_top(settings.always_on_top);
+        // Docked windows are positioned by `dock_window`; never pull them
+        // back to the saved free-floating position.
+        if settings.mode == DisplayMode::Docked {
+            return;
+        }
         if let (Some(x), Some(y)) = (settings.position_x, settings.position_y) {
             let size = window.outer_size().unwrap_or(PhysicalSize {
                 width: 280,
@@ -185,13 +239,14 @@ fn tray_icon() -> tauri::image::Image<'static> {
     let mut pixels = vec![0u8; (size * size * 4) as usize];
     for y in 0..size {
         for x in 0..size {
-            let border = x < 4 || y < 4 || x >= size - 4 || y >= size - 4;
-            let mark = (11..21).contains(&x) || (11..21).contains(&y);
-            if border || mark {
+            let first_bar = (7..12).contains(&x) && (16..26).contains(&y);
+            let second_bar = (14..19).contains(&x) && (7..26).contains(&y);
+            let third_bar = (21..26).contains(&x) && (12..26).contains(&y);
+            if first_bar || second_bar || third_bar {
                 let index = ((y * size + x) * 4) as usize;
-                pixels[index] = 85;
-                pixels[index + 1] = if border { 242 } else { 238 };
-                pixels[index + 2] = if border { 197 } else { 192 };
+                pixels[index] = 245;
+                pixels[index + 1] = 245;
+                pixels[index + 2] = 247;
                 pixels[index + 3] = 255;
             }
         }
@@ -230,14 +285,15 @@ pub fn run() {
             let mini = MenuItemBuilder::with_id("mode-mini", "Mini mode").build(app)?;
             let collapsed =
                 MenuItemBuilder::with_id("mode-collapsed", "Collapsed mode").build(app)?;
+            let docked = MenuItemBuilder::with_id("mode-docked", "Dock to screen edge").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
             let menu = MenuBuilder::new(app)
-                .items(&[&toggle, &refresh, &normal, &mini, &collapsed, &quit])
+                .items(&[&toggle, &refresh, &normal, &mini, &collapsed, &docked, &quit])
                 .build()?;
 
-            let _tray = TrayIconBuilder::with_id("ai-limits-tray")
+            let _tray = TrayIconBuilder::with_id("llm-usage-tray")
                 .icon(tray_icon())
-                .tooltip("AI Limits")
+                .tooltip("LLM Usage")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "toggle" => toggle_window(app),
@@ -254,6 +310,10 @@ pub fn run() {
                     }
                     "mode-collapsed" => {
                         let _ = app.emit("tray-mode", "collapsed");
+                        show_window(app);
+                    }
+                    "mode-docked" => {
+                        let _ = app.emit("tray-mode", "docked");
                         show_window(app);
                     }
                     "quit" => app.exit(0),
@@ -284,8 +344,11 @@ pub fn run() {
             set_window_size,
             start_window_drag,
             set_display_mode,
+            dock_window,
+            cursor_in_window,
+            set_click_through,
             quit_app
         ])
         .run(tauri::generate_context!())
-        .expect("error while running AI Limits");
+        .expect("error while running LLM Usage");
 }
